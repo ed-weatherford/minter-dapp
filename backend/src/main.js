@@ -45,7 +45,22 @@ const buildSetup = () => {
   }
 };
 
-const getRarityWeight = (_str) => {
+//New Method
+//Modified By: EEW
+//Desription: Extract rarity weight from name paramter of layerOrders list
+const getRarityWeightFromStr = (_str) => {
+  var nameWithoutWeight = Number(
+    _str.split(rarityDelimiter).pop()
+  );
+  if (isNaN(nameWithoutWeight)) {
+    nameWithoutWeight = 1;
+  }
+  return nameWithoutWeight;
+};
+
+//Modified By: EEW
+//Desription: Renamed for readablility
+const getRarityWeightFromFilename = (_str) => {
   let nameWithoutExtension = _str.slice(0, -4);
   var nameWithoutWeight = Number(
     nameWithoutExtension.split(rarityDelimiter).pop()
@@ -68,6 +83,48 @@ const cleanName = (_str) => {
   return nameWithoutWeight;
 };
 
+//New Method
+//Modified By: EEW
+//Desription: Extract multiple directories defined in a single name separted by a colon
+const getMultiDirs = (path) => {
+  var cleanPath = path;
+  var parentDir = "";
+  let multiDirNames = [];
+  let multiDirs = [];
+
+  if (path.substr(-1) === '/' || path.substr(-1) === '\\') {
+    cleanPath = path.substr(0, path.length - 1);
+  }
+  
+  parentDir = cleanPath.substring(0, cleanPath.lastIndexOf('/') + 1);
+  multiDirNames = cleanPath.split('/').pop().split(":");
+
+  multiDirNames.forEach((dirName) => {
+    multiDirs.push(parentDir + dirName + "/");
+  });
+
+  return multiDirs;
+}
+
+//New Method
+//Modified By: EEW
+const getElementsFromDir = (path) => {
+  return fs
+  .readdirSync(path)
+  .filter((item) => !/(^|\/)\.[^\/\.]/g.test(item))
+  .map((i, index) => {
+    return {
+      id: index,
+      name: cleanName(i),
+      filename: i,
+      path: `${path}${i}`,
+      weight: getRarityWeightFromFilename(i),
+    };
+  });
+}
+
+//Original Code
+/*
 const getElements = (path) => {
   return fs
     .readdirSync(path)
@@ -81,6 +138,48 @@ const getElements = (path) => {
         weight: getRarityWeight(i),
       };
     });
+};
+*/
+
+const getElements = (path) => {
+  let itemList = [];
+  var itemId = 0;
+
+  //Test the layerconfiguration for multiple dirs definition (separater is a colon)
+  //The full directory path is provided so the count must be greater than 1
+  if (path.match(/:/g).length > 1) {
+    multiDirs = getMultiDirs(path);
+
+    multiDirs.forEach((dirName) => {
+      var itemWeight = 0;
+      var cleanDirName = dirName
+
+      //Test for rarity definition in directory name
+      //Works best for single image directories that are cobine with other directories
+      if (dirName.match(/#/g)) {
+        dirNameWOSlash = dirName.substring(0, dirName.lastIndexOf('/'))
+        cleanDirName = dirNameWOSlash.split(rarityDelimiter).shift() + "/"
+        itemWeight = getRarityWeightFromStr(dirNameWOSlash)
+      }
+
+      let tempList = getElementsFromDir(cleanDirName);
+
+      //Process the contents of the directory and add them to a map
+      tempList.forEach((item) => {
+        //Manage the proper id sequnce numbers
+        item["id"] = itemId;
+        if(itemWeight > 0) {
+          item["weight"] = itemWeight;
+        }
+        itemList.push(item);
+        itemId++;
+      });
+    });
+  } else {
+    itemList = getElementsFromDir(path)
+  }
+
+  return itemList;
 };
 
 const layersSetup = (layersOrder) => {
@@ -330,6 +429,7 @@ function shuffle(array) {
 const startCreating = async () => {
   let layerConfigIndex = 0;
   let editionCount = 1;
+  let actualCount = process.env.START_IMAGE_NO;
   let failedCount = 0;
   let abstractedIndexes = [];
   for (
@@ -337,7 +437,9 @@ const startCreating = async () => {
     i <= layerConfigurations[layerConfigurations.length - 1].growEditionSizeTo;
     i++
   ) {
-    abstractedIndexes.push(i);
+    //abstractedIndexes.push(i);
+    abstractedIndexes.push(actualCount);
+    actualCount++;
   }
   if (shuffleLayerConfigurations) {
     abstractedIndexes = shuffle(abstractedIndexes);
